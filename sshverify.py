@@ -4,10 +4,10 @@ import concurrent.futures
 import threading
 import time
 
-MAX_THREADS = 50
+MAX_THREADS = 75
 
 class TimeoutThread:
-    def __init__(self, func, args=(), timeout=5):
+    def __init__(self, func, args=(), timeout=8):
         self.func = func
         self.args = args
         self.timeout = timeout
@@ -30,11 +30,11 @@ def ssh_and_get_version(ip, port, user, password):
     try:
         client = paramiko.SSHClient()
         client.set_missing_host_key_policy(paramiko.AutoAddPolicy())
-        client.connect(ip, port=port, username=user, password=password, timeout=3)
+        client.connect(ip, port=port, username=user, password=password, timeout=8, banner_timeout=8)
 
         with client.invoke_shell() as ssh:
             ssh.send('cat /proc/version\n')
-            time.sleep(1)  # Give the command some time to execute
+            time.sleep(2)  # Give the command some time to execute
             result = ssh.recv(4096).decode('utf-8').strip()
         
         client.close()
@@ -47,9 +47,11 @@ def ssh_and_get_version(ip, port, user, password):
 
 def process_line(line):
     ip, port, user, password = line.strip().split(":")
-    tt = TimeoutThread(ssh_and_get_version, args=(ip, int(port), user, password), timeout=3)
+    tt = TimeoutThread(ssh_and_get_version, args=(ip, int(port), user, password), timeout=8)
     result = tt.execute()
-    return f"{ip}:{port}:{user}:{password}:{result}"
+    output = f"{ip}:{port}:{user}:{password}:{result}"
+    print(f"Processed: {output.split(':')[0]}:{output.split(':')[1]}")
+    return output
 
 def main():
     # Check if output filename is provided
@@ -61,10 +63,8 @@ def main():
 
     with open(output_file, "w") as outfile:
         with concurrent.futures.ThreadPoolExecutor(max_workers=MAX_THREADS) as executor:
-            results = list(executor.map(process_line, sys.stdin))
-            for result in results:
+            for result in executor.map(process_line, sys.stdin):
                 outfile.write(result + "\n")
-                print(f"Processed: {result.split(':')[0]}:{result.split(':')[1]}")
 
 if __name__ == "__main__":
     main()
