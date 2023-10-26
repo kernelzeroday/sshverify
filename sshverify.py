@@ -22,8 +22,8 @@ class TimeoutThread:
         thread = threading.Thread(target=self.worker)
         thread.start()
         thread.join(self.timeout)
-        if not self.finished:
-            return f"Error: Execution timed out after {self.timeout} seconds"
+        if thread.is_alive():
+            return f"Error: Worker thread did not complete in {self.timeout} seconds"
         return self.result
 
 def ssh_and_get_version(ip, port, user, password):
@@ -39,7 +39,6 @@ def ssh_and_get_version(ip, port, user, password):
         
         client.close()
         
-        # Removing newlines, carriage returns, and trimming whitespace
         return result.replace("\n", "").replace("\r", "").strip()
         
     except Exception as e:
@@ -54,7 +53,6 @@ def process_line(line):
     return output
 
 def main():
-    # Check if output filename is provided
     if len(sys.argv) < 2:
         print("Usage: python script_name.py output_filename")
         sys.exit(1)
@@ -63,8 +61,13 @@ def main():
 
     with open(output_file, "w") as outfile:
         with concurrent.futures.ThreadPoolExecutor(max_workers=MAX_THREADS) as executor:
-            for result in executor.map(process_line, sys.stdin):
+            futures = [executor.submit(process_line, line) for line in sys.stdin]
+            
+            for future in concurrent.futures.as_completed(futures):
+                result = future.result()
                 outfile.write(result + "\n")
+
+    print("All tasks completed!")
 
 if __name__ == "__main__":
     main()
